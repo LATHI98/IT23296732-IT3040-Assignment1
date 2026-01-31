@@ -1,0 +1,12 @@
+// @ts-check
+const { defineConfig } = require('@playwright/test');
+
+module.exports = defineConfig({
+  timeout: 30000,
+  use: {
+    headless: false,
+    viewport: { width: 1280, height: 720 },
+    actionTimeout: 15000,
+    ignoreHTTPSErrors: true,
+  },
+});

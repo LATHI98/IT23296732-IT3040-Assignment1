@@ -1,0 +1,14 @@
+{
+  "name": "singlish-to-sinhala-tests",
+  "version": "1.0.0",
+  "description": "Singlish to Sinhala Translator Automation Tests",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.58.1"
+  }
+}
