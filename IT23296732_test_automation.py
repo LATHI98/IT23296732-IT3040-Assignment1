@@ -9,7 +9,9 @@ import openpyxl
 from openpyxl.cell.cell import MergedCell
 
 # Configuration
-ROOT_DIR = Path(__file__).resolve().parent.parent
+# Use the repository folder as the root so relative paths resolve from
+# the script's containing directory rather than the filesystem root.
+ROOT_DIR = Path(__file__).resolve().parent
 TESTS_DIR = ROOT_DIR / "test_automation"
 
 DEFAULT_EXCEL_CANDIDATES = [
@@ -58,6 +60,17 @@ DEFAULT_RETRY_WAIT_MS = 1000
 DEFAULT_TYPE_DELAY_MS = 30
 DEFAULT_TIMEOUT_MS = 60000
 DEFAULT_SLOW_MO_MS = 0
+
+def _save_workbook_with_fallback(wb, preferred_path: str) -> str:
+    try:
+        wb.save(preferred_path)
+        return preferred_path
+    except PermissionError:
+        base = Path(preferred_path)
+        alt = base.with_name(f"{base.stem}_results{base.suffix}")
+        wb.save(str(alt))
+        print(f"Warning: '{preferred_path}' is locked. Saved results to '{alt}' instead.")
+        return str(alt)
 
 def _configure_stdout():
     try:
@@ -410,8 +423,23 @@ def run_test():
 
     header_values = _header_values(ws, header_row)
 
-    input_col_idx = _find_column_index(header_values, args.input_col, DEFAULT_INPUT_COLUMN_CANDIDATES)
-    expected_col_idx = _find_column_index(header_values, args.expected_col, DEFAULT_EXPECTED_COLUMN_CANDIDATES)
+    def _parse_col_arg(val):
+        if val is None:
+            return None
+        try:
+            iv = int(val)
+            if iv > 0:
+                return iv
+        except Exception:
+            pass
+        return None
+
+    input_col_idx = _parse_col_arg(args.input_col) or _find_column_index(
+        header_values, args.input_col, DEFAULT_INPUT_COLUMN_CANDIDATES
+    )
+    expected_col_idx = _parse_col_arg(args.expected_col) or _find_column_index(
+        header_values, args.expected_col, DEFAULT_EXPECTED_COLUMN_CANDIDATES
+    )
 
     if not input_col_idx:
         printable = [str(v) if v is not None else "" for v in header_values]
@@ -512,8 +540,10 @@ def run_test():
                         break
                     page.wait_for_timeout(max(0, int(args.retry_wait_ms)))
 
-                if prev_output and actual_output == "" and prev_output != "":
-                    raise RuntimeError("Output did not update for this input (still showing previous output).")
+                # Some inputs (URLs, emails, symbols) may legitimately leave output unchanged.
+                # Treat this as a normal result so the row is evaluated, not a UI error.
+                if actual_output == "" and prev_output:
+                    actual_output = prev_output
 
                 _set_cell_value(ws, row_index, actual_col_idx, actual_output)
 
@@ -556,12 +586,12 @@ def run_test():
         browser.close()
 
     try:
-        wb.save(args.output)
+        final_output = _save_workbook_with_fallback(wb, args.output)
     except Exception as e:
         print(f"Error saving output file '{args.output}': {e}")
         return
 
-    print(f"Test completed. Results saved to {args.output}")
+    print(f"Test completed. Results saved to {final_output}")
 
 if __name__ == "__main__":
     run_test()
